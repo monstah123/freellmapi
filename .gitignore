@@ -11,8 +11,13 @@ server/data/
 # Auto-generated dev encryption key (written next to the SQLite DB when
 # ENCRYPTION_KEY is unset outside production). Never commit it.
 .encryption-key
+# Environment files can contain secrets. Ignore dotenv variants at every level;
+# keep the checked-in template available for setup.
 .env
-.env.local
+.env.*
+*.env
+*.env.*
+!.env.example
 /tunnel-client.yaml
 .DS_Store
 

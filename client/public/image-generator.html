@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FreeLLMAPI Image Generator</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --card: #13161b;
+      --border: #262b33;
+      --text: #e8eaed;
+      --muted: #9aa0a6;
+      --accent: #7c9cff;
+      --accent-strong: #5f7fff;
+      --danger: #ff6b6b;
+      --ok: #63d19e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 500px at 15% -10%, rgba(124, 156, 255, 0.14), transparent 60%),
+        radial-gradient(700px 400px at 100% 0%, rgba(99, 209, 158, 0.08), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { width: min(980px, 100%); margin: 0 auto; padding: 32px 20px 56px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+    header p { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    header a { color: var(--accent); text-decoration: none; font-size: 13px; white-space: nowrap; padding-top: 4px; }
+    header a:hover { text-decoration: underline; }
+    .card {
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+    }
+    .card + .card { margin-top: 18px; }
+    label { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); margin-bottom: 7px; }
+    select, textarea, button {
+      font: inherit;
+      color: var(--text);
+      background: #0f1216;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      outline: none;
+    }
+    select { width: 100%; padding: 11px 12px; }
+    textarea { width: 100%; min-height: 96px; resize: vertical; padding: 12px; line-height: 1.5; }
+    select:focus, textarea:focus { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); }
+    .field + .field { margin-top: 16px; }
+    .row { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+    .row .field { flex: 1 1 180px; margin-top: 0; }
+    button {
+      cursor: pointer;
+      padding: 11px 20px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      border-color: transparent;
+      color: #0b1020;
+      font-weight: 700;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+    button:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .status { margin: 16px 0 0; min-height: 20px; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--ok); }
+    .result { display: none; }
+    .result.visible { display: block; }
+    .result img {
+      display: block;
+      width: 100%;
+      max-width: 768px;
+      margin: 0 auto 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: #0a0c0f;
+    }
+    .result .row { justify-content: space-between; }
+    .result a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .result a:hover { text-decoration: underline; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #0f1216;
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    code {
+      background: #0f1216;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 12px;
+    }
+    @media (max-width: 560px) {
+      header { flex-direction: column; }
+      .row { align-items: stretch; }
+      .row button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Image Generator</h1>
+        <p>
+          A local front-end for FreeLLMAPI’s
+          <code>POST /v1/images/generations</code>.
+          This is separate from the chat Playground.
+        </p>
+      </div>
+      <a href="/models/image">Open Image model list →</a>
+    </header>
+
+    <section class="card">
+      <div class="field">
+        <label for="model">Model</label>
+        <select id="model" disabled>
+          <option value="">Loading image models…</option>
+        </select>
+        <p id="modelHint" class="hint">Only image models with a working key are listed.</p>
+      </div>
+
+      <div class="field">
+        <label for="prompt">Prompt</label>
+        <textarea id="prompt" spellcheck="true">a cozy cabin in a snowy forest at dusk, warm glowing windows, cinematic lighting, highly detailed</textarea>
+      </div>
+
+      <div class="row" style="margin-top:16px">
+        <div class="field">
+          <label for="size">Size</label>
+          <select id="size">
+            <option value="512x512">512 × 512</option>
+            <option value="768x768">768 × 768</option>
+            <option value="1024x1024" selected>1024 × 1024</option>
+            <option value="1024x1536">1024 × 1536 (portrait)</option>
+            <option value="1536x1024">1536 × 1024 (landscape)</option>
+          </select>
+        </div>
+        <button id="generate" type="button" disabled>Generate image</button>
+      </div>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="resultCard" class="card result">
+      <img id="resultImage" alt="Generated image preview" />
+      <div class="row">
+        <a id="download" download="freellmapi-image.jpg">↓ Download image</a>
+        <span id="resultMeta" class="badge"></span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    'use strict';
+
+    const TOKEN_KEY = 'freellmapi_dashboard_token';
+
+    const els = {
+      model: document.getElementById('model'),
+      modelHint: document.getElementById('modelHint'),
+      prompt: document.getElementById('prompt'),
+      size: document.getElementById('size'),
+      generate: document.getElementById('generate'),
+      status: document.getElementById('status'),
+      resultCard: document.getElementById('resultCard'),
+      resultImage: document.getElementById('resultImage'),
+      download: document.getElementById('download'),
+      resultMeta: document.getElementById('resultMeta'),
+    };
+
+    const state = {
+      dashboardToken: localStorage.getItem(TOKEN_KEY) || '',
+      apiKey: '',
+      models: [],
+    };
+
+    function setStatus(message, kind) {
+      els.status.textContent = message || '';
+      els.status.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    async function api(path, options) {
+      const headers = new Headers((options && options.headers) || {});
+      if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+      if (state.dashboardToken) headers.set('Authorization', 'Bearer ' + state.dashboardToken);
+
+      const res = await fetch(path, Object.assign({}, options, { headers }));
+      const text = await res.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+
+      if (res.status === 401) {
+        throw new Error('Your dashboard session is not valid. Open http://localhost:5173, log in, then reload this page.');
+      }
+      if (!res.ok) {
+        const message = (body && body.error && (body.error.message || body.error)) || body && body.message || ('HTTP ' + res.status);
+        throw new Error(String(message));
+      }
+      if (body === null) throw new Error('The API returned a non-JSON response. Is the FreeLLMAPI server running on port 3001?');
+      return body;
+    }
+
+    function uniqueModels(models) {
+      const seen = new Set();
+      return models.filter(function (m) {
+        if (!m || !m.modelId || seen.has(m.modelId)) return false;
+        seen.add(m.modelId);
+        return true;
+      });
+    }
+
+    async function load() {
+      if (!state.dashboardToken) {
+        setStatus('Open http://localhost:5173 and sign in first, then reload this page.', 'error');
+        return;
+      }
+
+      try {
+        setStatus('Loading image models…');
+
+        const media = await api('/api/media');
+        state.models = uniqueModels(
+          ((media && media.models) || []).filter(function (m) {
+            return m && m.modality === 'image' && m.enabled && m.keyCount > 0;
+          })
+        );
+
+        const keyData = await api('/api/settings/api-key');
+        state.apiKey = (keyData && keyData.apiKey) || '';
+
+        els.model.innerHTML = '';
+
+        if (state.apiKey) {
+          const auto = document.createElement('option');
+          auto.value = 'auto';
+          auto.textContent = 'Auto — let FreeLLMAPI choose';
+          els.model.appendChild(auto);
+        }
+
+        for (const model of state.models) {
+          const option = document.createElement('option');
+          option.value = model.modelId;
+          option.textContent = model.displayName + ' — ' + model.platform;
+          els.model.appendChild(option);
+        }
+
+        if (!state.apiKey) {
+          setStatus('The unified API key could not be loaded. Open Keys → Unified API key in the dashboard.', 'error');
+          return;
+        }
+
+        if (state.models.length === 0) {
+          els.model.innerHTML = '<option value="">No usable image models</option>';
+          els.modelHint.textContent = 'No image model currently has a working key. Add a Pollinations or Cloudflare key on the Keys page.';
+          setStatus('No usable image models were found.', 'error');
+          return;
+        }
+
+        els.model.disabled = false;
+        els.generate.disabled = false;
+        els.modelHint.textContent = 'Only image models with a working key are listed. “Auto” tries them in router order.';
+        setStatus('Ready. Pick a model and generate.');
+      } catch (err) {
+        setStatus(err && err.message ? err.message : String(err), 'error');
+        els.model.disabled = true;
+        els.generate.disabled = true;
+      }
+    }
+
+    function mimeFromBase64(b64) {
+      if (b64.startsWith('/9j/')) return 'image/jpeg';
+      if (b64.startsWith('iVBOR')) return 'image/png';
+      if (b64.startsWith('UklGR')) return 'image/webp';
+      return 'image/jpeg';
+    }
+
+    function extensionForMime(mime) {
+      if (mime === 'image/png') return 'png';
+      if (mime === 'image/webp') return 'webp';
+      return 'jpg';
+    }
+
+    async function generate() {
+      const prompt = els.prompt.value.trim();
+      if (!prompt) {
+        setStatus('Enter a prompt first.', 'error');
+        els.prompt.focus();
+        return;
+      }
+      if (!state.apiKey) {
+        setStatus('No unified API key loaded. Reload the page after signing in to the dashboard.', 'error');
+        return;
+      }
+
+      els.generate.disabled = true;
+      els.generate.textContent = 'Generating…';
+      els.resultCard.classList.remove('visible');
+      setStatus('Generating image. Free routes can take a few seconds…');
+
+      try {
+        const payload = {
+          model: els.model.value || 'auto',
+          prompt: prompt,
+          size: els.size.value || '1024x1024',
+        };
+
+        const res = await fetch('/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + state.apiKey,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const text = await res.text();
+        let body = null;
+        try { body = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+
+        if (!res.ok) {
+          const message = (body && body.error && (body.error.message || body.error)) || ('HTTP ' + res.status);
+          throw new Error(String(message));
+        }
+
+        const item = body && body.data && body.data[0];
+        if (!item) throw new Error('The API returned no image data.');
+
+        let src;
+        let downloadName;
+
+        if (item.b64_json) {
+          const mime = mimeFromBase64(item.b64_json);
+          src = 'data:' + mime + ';base64,' + item.b64_json;
+          downloadName = 'freellmapi-image.' + extensionForMime(mime);
+        } else if (item.url) {
+          src = item.url;
+          let ext = 'jpg';
+          try {
+            const pathname = new URL(item.url).pathname;
+            const match = pathname.match(/\.([a-z0-9]+)$/i);
+            if (match && ['jpg', 'jpeg', 'png', 'webp'].includes(match[1].toLowerCase())) ext = match[1].toLowerCase();
+          } catch { /* keep jpg */ }
+          downloadName = 'freellmapi-image.' + ext;
+        } else {
+          throw new Error('The API returned neither b64_json nor a URL.');
+        }
+
+        els.resultImage.src = src;
+        els.download.href = src;
+        els.download.download = downloadName;
+        els.resultMeta.textContent = [body.provider, body.model || payload.model].filter(Boolean).join(' · ') || 'image';
+        els.resultCard.classList.add('visible');
+        setStatus('Image generated.', 'ok');
+        els.resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        setStatus(err && err.message ? err.message : String(err), 'error');
+      } finally {
+        els.generate.disabled = false;
+        els.generate.textContent = 'Generate image';
+      }
+    }
+
+    els.generate.addEventListener('click', generate);
+    els.prompt.addEventListener('keydown', function (event) {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        if (!els.generate.disabled) generate();
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

@@ -280,6 +280,24 @@ export class OpenAICompatProvider extends BaseProvider {
     ) {
       return { temperature: undefined, topP: options.top_p ?? 1 };
     }
+    // Azure-backed Mistral deployments treat temperature=0 as greedy sampling
+    // and reject any top_p other than 1 ("top_p must be 1 when using greedy
+    // sampling"). Match the native Mistral strictness for custom-endpoint
+    // Mistral models.
+    if (
+      this.platform === 'custom' &&
+      /(^|\/)mistral/i.test(modelId) &&
+      options?.temperature === 0
+    ) {
+      return { temperature: 0, topP: 1 };
+    }
+    // Pollinations' Kimi K3 route only accepts top_p=0.95: any other value is
+    // rejected with a 400 before the request reaches the model. Pin it for
+    // custom-endpoint Kimi K3 instead of letting a client's sampling choice
+    // fail the whole route.
+    if (this.platform === 'custom' && /(^|\/)kimi-k3(?:$|[./])/i.test(modelId)) {
+      return { temperature: options?.temperature, topP: 0.95 };
+    }
     return { temperature: options?.temperature, topP: options?.top_p };
   }
 
@@ -296,7 +314,13 @@ export class OpenAICompatProvider extends BaseProvider {
    */
   private static readonly STRICT_PLATFORMS = new Set(['mistral', 'groq', 'cerebras']);
   private messagesForPlatform(messages: ChatMessage[], modelId: string): ChatMessage[] {
-    if (OpenAICompatProvider.STRICT_PLATFORMS.has(this.platform)) {
+    // Custom relays can front the same strict upstreams. Pollinations' Mistral
+    // routes, for example, are Azure OpenAI deployments that 422 on the
+    // provider-private `reasoning_content` field. Treat a Mistral model on a
+    // custom endpoint like the native Mistral platform and strip it before
+    // dispatch instead of failing every routed request (#1070).
+    const strictCustomMistral = this.platform === 'custom' && /(^|\/)mistral/i.test(modelId);
+    if (OpenAICompatProvider.STRICT_PLATFORMS.has(this.platform) || strictCustomMistral) {
       // Rebuild every message from a whitelist of keys, so `partial` and the
       // reasoning extensions never reach these platforms.
       return messages.map((m) => {
